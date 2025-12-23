@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import aiosqlite
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -508,7 +509,11 @@ def t_support() -> str:
 
 
 # ---------------- Bot ----------------
-bot = Bot(BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(
+    BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+
 dp = Dispatcher()
 
 
@@ -1152,3 +1157,4 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
