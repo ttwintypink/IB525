@@ -829,22 +829,42 @@ async def deal_received(cb: CallbackQuery):
         await cb.answer("Недостаточно прав.", show_alert=True)
         return
 
+    # Обновляем статус сделки на "COMPLETED"
     await set_deal_status(deal_id, "COMPLETED")
     await mark_field(deal_id, "received_at")
 
-    # отправить деньги продавцу
+    # Увеличиваем баланс продавца
+    seller_balance = await get_balance(deal["seller_id"], deal["currency"])
+    new_balance = seller_balance + deal["amount"]
+    await add_balance(deal["seller_id"], deal["currency"], deal["amount"])
+
+    # Отправляем уведомление продавцу о завершении сделки и начислении средств
     try:
         await bot.send_message(
             deal["seller_id"],
             f"✅ <b>Сделка #{deal_id} завершена</b>\n\n"
-            "💰 <b>Средства были переведены вам</b>. Вы можете запросить вывод.",
+            f"💰 <b>Средства были переведены вам</b> на сумму: <code>{deal['amount']} {deal['currency']}</code>\n"
+            "Теперь вы можете запросить вывод средств.",
             reply_markup=kb_admin_menu(is_owner(cb.from_user.id))
         )
     except Exception:
         pass
 
+    # Отправляем уведомление покупателю
+    try:
+        await bot.send_message(
+            deal["buyer_id"],
+            f"✅ <b>Сделка #{deal_id} завершена</b>\n\n"
+            "Средства были переведены продавцу. Вы можете оставить отзыв или запросить новый товар.",
+            reply_markup=kb_main(await is_admin(cb.from_user.id))
+        )
+    except Exception:
+        pass
+
+    # Обновляем сообщение о завершении сделки
     await cb.message.edit_text(
-        f"✅ <b>Сделка завершена</b> (сделка <code>#{deal_id}</code>)\n\n"
+        f"✅ <b>Сделка #{deal_id} завершена</b>\n\n"
+        f"🧾 <b>ID:</b> <code>#{deal_id}</code>\n\n"
         "› <i>Уведомления отправлены обеим сторонам.</i>"
     )
     await cb.answer()
@@ -913,6 +933,26 @@ async def profile_withdraw(cb: CallbackQuery):
         pass
 
     await cb.answer()
+
+
+async def add_balance(user_id: int, currency: str, amount: float) -> None:
+    await ensure_balance_row(user_id, currency)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE balances SET balance = balance + ? WHERE user_id = ? AND currency = ?",
+            (float(amount), user_id, currency),
+        )
+        await db.commit()
+
+
+async def get_balance(user_id: int, currency: str) -> float:
+    await ensure_balance_row(user_id, currency)
+    async with aiosqlite.connect(DB_PATH) as db:
+        row = await (await db.execute(
+            "SELECT balance FROM balances WHERE user_id = ? AND currency = ?",
+            (user_id, currency),
+        )).fetchone()
+    return float(row[0]) if row else 0.0
 
 
 # ---------------- Admin panel ----------------
@@ -1226,6 +1266,7 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
 
 
 
