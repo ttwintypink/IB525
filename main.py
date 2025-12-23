@@ -816,6 +816,40 @@ async def deal_decline(cb: CallbackQuery):
     await cb.answer()
 
 
+@dp.callback_query(lambda c: c.data and c.data.startswith("deal:received:"))
+async def deal_received(cb: CallbackQuery):
+    deal_id = int(cb.data.split(":")[-1])
+    deal = await get_deal_by_id(deal_id)
+    if not deal:
+        await cb.message.edit_text("❌ <b>Сделка не найдена</b>")
+        await cb.answer()
+        return
+
+    if cb.from_user.id != deal["buyer_id"]:
+        await cb.answer("Недостаточно прав.", show_alert=True)
+        return
+
+    await set_deal_status(deal_id, "COMPLETED")
+    await mark_field(deal_id, "received_at")
+
+    # отправить деньги продавцу
+    try:
+        await bot.send_message(
+            deal["seller_id"],
+            f"✅ <b>Сделка #{deal_id} завершена</b>\n\n"
+            "💰 <b>Средства были переведены вам</b>. Вы можете запросить вывод.",
+            reply_markup=kb_admin_menu(is_owner(cb.from_user.id))
+        )
+    except Exception:
+        pass
+
+    await cb.message.edit_text(
+        f"✅ <b>Сделка завершена</b> (сделка <code>#{deal_id}</code>)\n\n"
+        "› <i>Уведомления отправлены обеим сторонам.</i>"
+    )
+    await cb.answer()
+
+
 # -------- Menus: deposit/profile --------
 @dp.callback_query(lambda c: c.data == "menu:deposit")
 async def menu_deposit(cb: CallbackQuery):
@@ -1192,5 +1226,6 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
 
 
