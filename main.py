@@ -720,6 +720,41 @@ async def ui_hide(cb: CallbackQuery):
 
 
 # -------- Deal actions (accept/decline) --------
+@dp.callback_query(lambda c: c.data and c.data.startswith("deal:delivered:"))
+async def deal_delivered(cb: CallbackQuery):
+    deal_id = int(cb.data.split(":")[-1])
+    deal = await get_deal_by_id(deal_id)
+    if not deal:
+        await cb.message.edit_text("❌ <b>Сделка не найдена</b>")
+        await cb.answer()
+        return
+
+    if cb.from_user.id != deal["seller_id"]:
+        await cb.answer("Недостаточно прав.", show_alert=True)
+        return
+
+    await set_deal_status(deal_id, "AWAITING_CONFIRMATION")
+    await mark_field(deal_id, "delivered_at")
+
+    # отправить сообщение покупателю
+    try:
+        await bot.send_message(
+            deal["buyer_id"],
+            f"✅ <b>Товар передан</b> по сделке <code>#{deal_id}</code>\n\n"
+            "Пожалуйста, проверьте товар и подтвердите его получение.",
+            reply_markup=kb_buyer_received(deal_id)
+        )
+    except Exception:
+        pass
+
+    # уведомить продавца
+    await cb.message.edit_text(
+        f"✅ <b>Товар передан</b> (сделка <code>#{deal_id}</code>)\n\n"
+        "› <i>Покупателю отправлено уведомление.</i>"
+    )
+    await cb.answer()
+
+
 @dp.callback_query(lambda c: c.data and c.data.startswith("deal:accept:"))
 async def deal_accept(cb: CallbackQuery):
     deal_id = int(cb.data.split(":")[-1])
@@ -1157,4 +1192,5 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
 
